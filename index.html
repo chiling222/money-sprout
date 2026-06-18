@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="萌芽記帳">
 <title>萌芽記帳</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -36,6 +39,8 @@ body{font-family:var(--font-body);color:var(--ink);
 .hi h1{font-family:var(--font-num);font-weight:600;font-size:22px}
 .hi .sub{color:var(--ink-soft);font-size:13px;margin-top:2px}
 .avatar{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#FFD98A,#FF9F43);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:var(--shadow-sm);cursor:pointer}
+.avatar.logo{background:transparent;padding:0;overflow:hidden}
+.avatar.logo img{width:100%;height:100%;object-fit:cover;display:block}
 .num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
 .card{background:var(--card);border-radius:24px;padding:18px;box-shadow:var(--shadow-sm);border:1px solid var(--line)}
 .sec-title{font-family:var(--font-num);font-weight:600;font-size:15px;margin:22px 4px 12px;display:flex;align-items:center;gap:7px}
@@ -324,7 +329,7 @@ function renderHome(){
   }
 
   return `<div class="screen">
-    <div class="hi"><div><h1>嗨，${greet()} 👋</h1><div class="sub">${state.month} 月 · 一起變有錢的第 ${dayN()} 天</div></div><div class="avatar" onclick="openSettings()">🌱</div></div>
+    <div class="hi"><div><h1>嗨，${greet()} 👋</h1><div class="sub">${state.month} 月 · 一起變有錢的第 ${dayN()} 天</div></div><div class="avatar logo" onclick="openSettings()"><img src="icon-192.png" alt="萌芽記帳"></div></div>
     ${due>0?`<div class="alert"><span class="ax">⏰</span><span class="at">有 ${due} 筆分帳超過 ${state.settings.splitReminderDays} 天還沒結清，記得催一下！</span></div>`:''}
     <div class="sec-title">🥧 本月收支 <span class="more" data-go="budget">看預算</span></div>
     ${pie}
@@ -372,10 +377,7 @@ function renderBudget(){
         <div class="num" style="font-weight:600;color:${usedPct>=85?'var(--coral)':'var(--jade-deep)'}">${usedPct.toFixed(0)}%</div></div>
       </div>
       <div class="bar lg" style="margin-top:12px"><i style="width:${usedPct}%;background:${usedPct>=85?'var(--coral)':'var(--jade)'}"></i></div>
-      <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:11.5px">
-        <span style="color:var(--ink-soft)">已分配 <b class="num" style="color:var(--ink)">${f0(alloc)}</b></span>
-        <span style="color:${unalloc<0?'var(--coral)':'var(--jade)'};font-weight:600">${state.income===0?'點此設定收入':unalloc<0?'⚠️ 超出 '+f(-unalloc):'剩 '+f(unalloc)+' 可分配'}</span>
-      </div>
+      <div id="budsum" style="display:flex;justify-content:space-between;margin-top:9px;font-size:11.5px">${budSumHTML()}</div>
     </div>
     <div class="sec-title">🎚️ 各分類預算</div>
     <div class="card">
@@ -390,9 +392,15 @@ function renderBudget(){
     <div style="text-align:center;font-size:11.5px;color:var(--ink-faint);margin-top:14px">支出類別使用達 ${Math.round(state.settings.overspendAlertRatio*100)}% 會自動提醒「快超支」⚠️<br>投資、儲蓄是「資產搬家」，達標會給 🎉</div>
   </div>`;
 }
+function budSumHTML(){
+  const alloc=allocated(), unalloc=state.income-alloc;
+  return `<span style="color:var(--ink-soft)">已分配 <b class="num" style="color:var(--ink)">${f0(alloc)}</b></span>
+    <span style="color:${unalloc<0?'var(--coral)':'var(--jade)'};font-weight:600">${state.income===0?'點此設定收入':unalloc<0?'⚠️ 超出 '+f(-unalloc):'剩 '+f(unalloc)+' 可分配'}</span>`;
+}
 function onSlide(i,val){val=+val;state.cats[i].budget=val;const c=state.cats[i];const prog=progressOf(c);
   const bv=document.getElementById('bv-'+i);if(bv)bv.textContent=f(val);
-  const rem=document.getElementById('rem-'+i);if(rem){rem.textContent=f(Math.max(val-prog,0));rem.style.color=(c.kind==='expense'&&prog>val)?'var(--coral)':'var(--jade-deep)';}}
+  const rem=document.getElementById('rem-'+i);if(rem){rem.textContent=f(Math.max(val-prog,0));rem.style.color=(c.kind==='expense'&&prog>val)?'var(--coral)':'var(--jade-deep)';}
+  const bs=document.getElementById('budsum');if(bs)bs.innerHTML=budSumHTML();}
 
 /* ---------- ADD (支出 / 收入 / 存錢) ---------- */
 function renderAdd(){
@@ -505,11 +513,56 @@ function renderSplit(){
           <div class="ms">${f(m.share)}</div>
           ${m.name===b.payer?`<span class="paidpill yes">已墊付</span>`:`<button class="paidpill ${m.paid?'yes':'no'}" onclick="togglePaid(${bi},${mi})">${m.paid?'已付款':'未付款'}</button>`}
         </div>`).join('')}
+        <div style="text-align:right;margin-top:12px"><button class="paidpill" style="background:#EEF1EC;color:var(--ink-soft)" onclick="openEditBill(${bi})">✏️ 編輯／刪除</button></div>
       </div>`;
     }).join(''):`<div class="card"><div class="empty"><div class="ee">🤝</div><div class="et">還沒有分帳<br>跟朋友出去、有人先墊錢時記一筆</div></div></div>`}
   </div>`;
 }
 function togglePaid(bi,mi){const m=state.splits[bi].members[mi];m.paid=!m.paid;m.paidAt=m.paid?Date.now():null;const b=state.splits[bi];if(b.members.every(x=>x.paid)){b.status='settled';b.settledAt=Date.now();}else{b.status='open';b.settledAt=null;}toast(m.paid?`${m.name} 標記為已付款 ✅`:`${m.name} 改回未付款`);save();rerender();}
+
+let editBill=null;
+function openEditBill(bi){const b=state.splits[bi];
+  editBill={idx:bi,title:b.title,total:String(b.total),e:b.e,payer:b.payer,
+    members:b.members.map(m=>({name:m.name,share:m.share,paid:m.paid,paidAt:m.paidAt||null})),newName:''};
+  editBillSheet();}
+function ebPayerShare(){const total=+editBill.total||0;const others=editBill.members.filter(m=>m.name!==editBill.payer).reduce((s,m)=>s+(+m.share||0),0);return total-others;}
+function editBillSheet(){const eb=editBill;const em=['🍽️','🍶','🏖️','🎬','🚕','🏠','🎁'];const ps=ebPayerShare();
+  sheet(`<h3>編輯分帳 ✏️</h3><p>可改每個人的金額（例如收整數），湊不齊的零頭由墊款人吸收。</p>
+    <input class="note-in" placeholder="名稱" value="${eb.title}" oninput="editBill.title=this.value">
+    <input class="note-in" type="number" inputmode="numeric" placeholder="總金額" style="margin-top:10px" value="${eb.total}" oninput="setEbTotal(this.value)">
+    <div class="emoji-pick">${em.map(e=>`<span class="${e===eb.e?'on':''}" onclick="editBill.e='${e}';editBillSheet()">${e}</span>`).join('')}</div>
+    <div class="fld">每個人的金額</div>
+    ${eb.members.map((m,mi)=>{const isP=m.name===eb.payer;return `<div class="fieldrow">
+      <div class="fe ${isP?'':''}" style="background:${isP?'var(--butter-soft)':'#EEF1EC'};font-size:13px;font-weight:700;color:var(--ink-soft)">${m.name[0]}</div>
+      <div class="fl">${m.name}${isP?' <span style="color:var(--ink-faint);font-weight:500;font-size:11px">墊款人·自動</span>':''} ${m.name!=='我'?`<span style="color:var(--coral);font-weight:500;font-size:11px;margin-left:4px;cursor:pointer" onclick="removeEbMember(${mi})">移除</span>`:''}</div>
+      ${isP?`<input id="eb-payershare" value="${ps}" readonly style="background:#F5F7F2;color:var(--ink-soft)">`:`<input type="number" inputmode="numeric" value="${m.share}" oninput="setEbShare(${mi},this.value)">`}
+    </div>`}).join('')}
+    <div style="display:flex;gap:8px;margin-top:4px"><input class="note-in" placeholder="新增參與者名字" value="${eb.newName}" oninput="editBill.newName=this.value" style="flex:1"><button class="btn ghost" style="width:auto;padding:12px 18px" onclick="addEbMember()">加入</button></div>
+    <div id="eb-diff" style="text-align:center;font-size:12px;margin-top:12px;font-weight:600;color:${ps<0?'var(--coral)':'var(--jade-deep)'}">${ps<0?'⚠️ 其他人金額已超過總額，請調低':'墊款人應付 '+f(ps)+'（含零頭）'}</div>
+    <div class="fld">誰先墊錢？</div>
+    <div class="pillrow">${eb.members.map((m,mi)=>`<div class="pill ${m.name===eb.payer?'on':''}" onclick="setEbPayer(${mi})">${m.name}</div>`).join('')}</div>
+    <button class="btn" style="margin-top:18px" onclick="saveEditBill()">儲存變更</button>
+    <button class="btn danger" style="margin-top:10px" onclick="deleteEditBill()">🗑 刪除這筆分帳</button>`);}
+function setEbTotal(v){editBill.total=v;refreshEbDerived();}
+function setEbShare(mi,v){editBill.members[mi].share=Math.max(+v||0,0);refreshEbDerived();}
+function refreshEbDerived(){const ps=ebPayerShare();const el=document.getElementById('eb-payershare');if(el)el.value=ps;const d=document.getElementById('eb-diff');if(d){d.textContent=ps<0?'⚠️ 其他人金額已超過總額，請調低':'墊款人應付 '+f(ps)+'（含零頭）';d.style.color=ps<0?'var(--coral)':'var(--jade-deep)';}}
+function setEbPayer(mi){editBill.payer=editBill.members[mi].name;editBillSheet();}
+function addEbMember(){const n=(editBill.newName||'').trim();if(!n){toast('輸入名字 🙂');return;}if(editBill.members.some(m=>m.name===n)){toast('已經有這個人了');return;}editBill.members.push({name:n,share:0,paid:false,paidAt:null});editBill.newName='';editBillSheet();}
+function removeEbMember(mi){const m=editBill.members[mi];if(m.name==='我'){toast('自己不能移除 🙂');return;}editBill.members.splice(mi,1);if(editBill.payer===m.name)editBill.payer=editBill.members[0].name;editBillSheet();}
+function saveEditBill(){const eb=editBill;const total=+eb.total;
+  if(!eb.title.trim()||!total){toast('名稱跟金額都要填喔 😉');return;}
+  if(eb.members.length<2){toast('至少要有兩個人分 🙂');return;}
+  const ps=ebPayerShare();if(ps<0){toast('其他人金額超過總額了，請調低');return;}
+  const members=eb.members.map(m=>m.name===eb.payer?{name:m.name,share:ps,paid:true,paidAt:m.paidAt||Date.now()}:{name:m.name,share:+m.share||0,paid:m.paid,paidAt:m.paidAt||null});
+  const b=state.splits[eb.idx];
+  b.title=eb.title.trim();b.total=total;b.e=eb.e;b.payer=eb.payer;b.members=members;b.splitMethod='custom';
+  b.status=members.every(m=>m.paid)?'settled':'open';b.settledAt=b.status==='settled'?(b.settledAt||Date.now()):null;
+  closeSheet();save();toast('分帳已更新 ✅');rerender();}
+function deleteEditBill(){const idx=editBill.idx;
+  sheet(`<h3>確定刪除？ ⚠️</h3><p>這筆分帳「${state.splits[idx].title}」會被永久刪除，無法復原。</p>
+    <button class="btn danger" onclick="doDeleteBill(${idx})">是的，刪除</button>
+    <button class="btn ghost" style="margin-top:10px" onclick="closeSheet()">取消</button>`);}
+function doDeleteBill(idx){state.splits.splice(idx,1);closeSheet();save();toast('已刪除這筆分帳');rerender();}
 
 /* ---------- onboarding ---------- */
 function openOnboarding(){
