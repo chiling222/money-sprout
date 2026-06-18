@@ -118,6 +118,14 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .chip.add{border-style:dashed;color:var(--ink-faint)}
 .note-in{width:100%;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:12px 14px;font-family:var(--font-body);font-size:16px}
 .note-in:focus{outline:none;border-color:var(--jade)}
+.binput{display:inline-flex;align-items:center;gap:1px;border:1.5px solid var(--line);border-radius:11px;padding:5px 11px;background:var(--card)}
+.binput .cur{color:var(--ink-faint);font-weight:600;font-family:var(--font-num);font-size:14px}
+.binput input{width:84px;border:none;outline:none;background:transparent;text-align:right;font-family:var(--font-num);font-weight:600;font-size:16px;color:var(--ink)}
+.binput:focus-within{border-color:var(--jade)}
+.daterow{display:flex;align-items:center;justify-content:space-between;margin-top:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:9px 14px}
+.daterow .dl{font-size:13px;color:var(--ink-soft);font-weight:600}
+.daterow input{border:none;background:transparent;font-family:var(--font-num);font-size:15px;color:var(--ink);font-weight:600;text-align:right}
+.daterow input:focus{outline:none}
 .addbottom{margin-top:auto}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}
 .key{padding:15px 0;border-radius:15px;background:var(--card);border:1px solid var(--line);font-family:var(--font-num);font-weight:600;font-size:22px;text-align:center;cursor:pointer;transition:.1s;user-select:none}
@@ -258,7 +266,7 @@ function blankState(){
   };
 }
 const state=blankState();
-const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', current:'home', dismissable:true };
+const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', date:'', current:'home', dismissable:true };
 
 /* ---------- persistence (graceful if blocked) ---------- */
 function persistable(){return {meta:state.meta,settings:state.settings,month:state.month,year:state.year,income:state.income,accounts:state.accounts,cats:state.cats,incomeCats:state.incomeCats,transactions:state.transactions,goals:state.goals,splits:state.splits};}
@@ -280,7 +288,12 @@ const totalMoved=()=>movedTo('savings')+movedTo('investment');
 const allocated=()=>state.cats.reduce((s,c)=>s+(c.budget||0),0);
 function greet(){const h=new Date().getHours();return h<5?'夜深了':h<11?'早安':h<14?'午安':h<18?'下午好':'晚安';}
 function dayN(){if(!state.meta.startedAt)return 1;return Math.floor((Date.now()-state.meta.startedAt)/DAY)+1;}
-function timeLabel(ts){const d=new Date(ts);const today=new Date();const hh=String(d.getHours()).padStart(2,'0'),mm=String(d.getMinutes()).padStart(2,'0');const same=d.toDateString()===today.toDateString();return `${same?'今天':(d.getMonth()+1)+'/'+d.getDate()} ${hh}:${mm}`;}
+function timeLabel(ts){const d=new Date(ts);const today=new Date();const same=d.toDateString()===today.toDateString();if(same){const hh=String(d.getHours()).padStart(2,'0'),mm=String(d.getMinutes()).padStart(2,'0');return `今天 ${hh}:${mm}`;}return `${d.getMonth()+1}/${d.getDate()}`;}
+function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function tsToInput(ts){const d=new Date(ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function inputToTs(s){if(!s)return Date.now();return new Date(s+'T12:00:00').getTime();}
+function applyEffect(t){if(t.type==='expense')state.accounts.cash-=t.amount;else if(t.type==='income'){state.accounts.cash+=t.amount;state.income+=t.amount;}else if(t.type==='transfer'){state.accounts.cash-=t.amount;state.accounts[t.toAccountId]+=t.amount;}}
+function reverseEffect(t){if(t.type==='expense')state.accounts.cash+=t.amount;else if(t.type==='income'){state.accounts.cash-=t.amount;state.income-=t.amount;}else if(t.type==='transfer'){state.accounts.cash+=t.amount;state.accounts[t.toAccountId]-=t.amount;}}
 function splitDue(b){return b.status!=='settled' && b.members.some(m=>!m.paid) && (Date.now()-b.createdAt)>=state.settings.splitReminderDays*DAY;}
 
 function statusChip(c){
@@ -348,17 +361,18 @@ function renderHome(){
       </div>
     </div>
     <div class="sec-title">🧾 最近紀錄 <span class="more" data-go="add">＋ 記一筆</span></div>
-    ${state.transactions.length?`<div class="card">${state.transactions.slice(0,5).map(txRow).join('')}</div>`
+    ${state.transactions.length?`<div class="card">${state.transactions.slice(0,5).map((t,i)=>txRow(t,i)).join('')}</div>`
       :`<div class="card"><div class="empty"><div class="ee">📝</div><div class="et">還沒有紀錄，記一筆就會出現在這</div></div></div>`}
   </div>`;
 }
-function txRow(t){
+function txRow(t,i){
   const col=t.type==='income'?'var(--jade)':t.type==='transfer'?'var(--ink-soft)':'var(--coral)';
   const sign=t.type==='income'?'+':t.type==='transfer'?'→':'−';
   const bg=t.type==='income'?'var(--jade-soft)':t.type==='transfer'?'#EEF1EC':'#F4F2EC';
-  return `<div class="mem" style="border-top:1px solid var(--line)">
+  const when=t.date?timeLabel(t.date):(t.t||'');
+  return `<div class="mem" style="border-top:1px solid var(--line);cursor:pointer" onclick="openEditTx(${i})">
     <div class="ma" style="background:${bg};border-radius:11px;width:38px;height:38px;font-size:18px">${t.e}</div>
-    <div><div class="mn">${t.n}</div><div class="bd">${t.t}</div></div>
+    <div><div class="mn">${t.n}</div><div class="bd">${when}</div></div>
     <div class="ms" style="margin-right:0;color:${col}">${sign}${f0(t.amount)}</div></div>`;
 }
 
@@ -381,15 +395,16 @@ function renderBudget(){
     </div>
     <div class="sec-title">🎚️ 各分類預算</div>
     <div class="card">
-      ${state.cats.map((c,i)=>{const prog=progressOf(c);const p=c.budget?Math.min(prog/c.budget,1)*100:0;const isT=c.kind==='transfer';return `<div class="alloc">
+      ${state.cats.map((c,i)=>{if(c.kind==='expense'&&c.special==='unknown_loss')return '';const prog=progressOf(c);const p=c.budget?Math.min(prog/c.budget,1)*100:0;const isT=c.kind==='transfer';return `<div class="alloc">
         <div class="ic" style="background:${tint(c.color,.15)}">${c.emoji}</div>
         <div class="mid"><div class="top"><span class="nm">${c.name} ${statusChip(c)}</span>
-          <span class="val num" id="bv-${i}" style="color:${c.color}">${f(c.budget)}</span></div>
-          <input type="range" min="0" max="20000" step="100" value="${c.budget}" style="accent-color:${c.color}" oninput="onSlide(${i},this.value)" onchange="save()">
+          <span class="binput"><span class="cur">$</span><input type="number" inputmode="numeric" value="${c.budget||''}" placeholder="0" oninput="setBudget(${i},this.value)" onchange="save()"></span></div>
+          <div class="bar" style="margin-top:9px"><i id="bbar-${i}" style="width:${p}%;background:${barColor(c)}"></i></div>
           <div style="font-size:11px;color:var(--ink-soft);margin-top:7px">${isT?'已存':'已花'} <b class="num">${f(prog)}</b> · ${isT?'目標還差':'還剩'} <b class="num" id="rem-${i}" style="color:${(!isT&&prog>c.budget)?'var(--coral)':'var(--jade-deep)'}">${f(Math.max(c.budget-prog,0))}</b></div>
         </div></div>`}).join('')}
     </div>
-    <div style="text-align:center;font-size:11.5px;color:var(--ink-faint);margin-top:14px">支出類別使用達 ${Math.round(state.settings.overspendAlertRatio*100)}% 會自動提醒「快超支」⚠️<br>投資、儲蓄是「資產搬家」，達標會給 🎉</div>
+    <button class="btn ghost" style="margin-top:12px" onclick="openManageCats()">🏷️ 新增／刪除分類</button>
+    <div style="text-align:center;font-size:11.5px;color:var(--ink-faint);margin-top:14px">直接點金額輸入即可 · 支出達 ${Math.round(state.settings.overspendAlertRatio*100)}% 會提醒「快超支」⚠️<br>投資、儲蓄是「資產搬家」，達標會給 🎉</div>
   </div>`;
 }
 function budSumHTML(){
@@ -397,8 +412,8 @@ function budSumHTML(){
   return `<span style="color:var(--ink-soft)">已分配 <b class="num" style="color:var(--ink)">${f0(alloc)}</b></span>
     <span style="color:${unalloc<0?'var(--coral)':'var(--jade)'};font-weight:600">${state.income===0?'點此設定收入':unalloc<0?'⚠️ 超出 '+f(-unalloc):'剩 '+f(unalloc)+' 可分配'}</span>`;
 }
-function onSlide(i,val){val=+val;state.cats[i].budget=val;const c=state.cats[i];const prog=progressOf(c);
-  const bv=document.getElementById('bv-'+i);if(bv)bv.textContent=f(val);
+function setBudget(i,val){val=Math.max(+val||0,0);state.cats[i].budget=val;const c=state.cats[i];const prog=progressOf(c);
+  const bar=document.getElementById('bbar-'+i);if(bar){bar.style.width=(c.budget?Math.min(prog/c.budget,1)*100:0)+'%';bar.style.background=barColor(c);}
   const rem=document.getElementById('rem-'+i);if(rem){rem.textContent=f(Math.max(val-prog,0));rem.style.color=(c.kind==='expense'&&prog>val)?'var(--coral)':'var(--jade-deep)';}
   const bs=document.getElementById('budsum');if(bs)bs.innerHTML=budSumHTML();}
 
@@ -425,6 +440,7 @@ function renderAdd(){
       ${mode==='expense'?`<div class="chip add" onclick="openAddCat()"><span class="e">＋</span><span class="n">自訂</span></div>`:''}
     </div>
     <input class="note-in" placeholder="加個備註（選填）…" value="${ui.note}" oninput="ui.note=this.value">
+    <div class="daterow"><span class="dl">📅 日期</span><input type="date" value="${ui.date}" onchange="ui.date=this.value"></div>
     <div class="addbottom">
       <button class="btn" onclick="saveTx()">完成 · ${btn}</button>
       <div class="keypad">${['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k=>`<div class="key" onclick="press('${k}')">${k}</div>`).join('')}</div>
@@ -437,27 +453,65 @@ function press(k){let a=ui.amount;if(k==='⌫')a=a.slice(0,-1);else if(k==='.'){
 function saveTx(){
   const amt=+ui.amount;
   if(!amt){toast('先輸入金額喔 😉');return;}
-  const now=Date.now();
+  const ts=inputToTs(ui.date);
   if(ui.type==='expense'){
     const c=catById(ui.cid);
-    state.transactions.unshift({type:'expense',amount:amt,categoryId:c.id,e:c.emoji,n:ui.note||c.name,t:timeLabel(now),date:now});
+    state.transactions.unshift({type:'expense',amount:amt,categoryId:c.id,e:c.emoji,n:ui.note||c.name,note:ui.note,date:ts});
     state.accounts.cash-=amt;
     const pp=c.budget?spentOf(c.id)/c.budget:0;
     toast(c.budget&&pp>=1?`記好了！${c.name}已超支 😅`:c.budget&&pp>=state.settings.overspendAlertRatio?`記好了！${c.name}快用完了 ⚠️`:'記好了 ✅');
   }else if(ui.type==='income'){
     const s=state.incomeCats.find(x=>x.id===ui.incomeCid);
-    state.transactions.unshift({type:'income',amount:amt,categoryId:s.id,e:s.e,n:ui.note||s.n,t:timeLabel(now),date:now});
+    state.transactions.unshift({type:'income',amount:amt,categoryId:s.id,e:s.e,n:ui.note||s.n,note:ui.note,date:ts});
     state.accounts.cash+=amt; state.income+=amt;
     toast(`收入入帳 +${f0(amt)} 🤑`);
   }else{
     const c=catById(ui.saveCid);
-    state.transactions.unshift({type:'transfer',amount:amt,categoryId:c.id,toAccountId:c.acc,fromAccountId:'cash',e:c.emoji,n:'存入'+c.name+(ui.note?' · '+ui.note:''),t:timeLabel(now),date:now});
+    state.transactions.unshift({type:'transfer',amount:amt,categoryId:c.id,toAccountId:c.acc,fromAccountId:'cash',e:c.emoji,n:'存入'+c.name+(ui.note?' · '+ui.note:''),note:ui.note,date:ts});
     state.accounts.cash-=amt; state.accounts[c.acc]+=amt;
     toast(`已存入${c.name} ${f0(amt)} 🌱`);
   }
   ui.amount='';ui.note='';
+  // keep ui.date for fast multiple entries on same day; reset to today on next open
   save(); go('home');
 }
+
+/* ---------- edit / delete a transaction ---------- */
+let editTxIdx=-1, editTxState=null;
+function openEditTx(idx){const t=state.transactions[idx];editTxIdx=idx;
+  editTxState={type:t.type,amount:String(t.amount),cid:t.categoryId,note:t.note||'',date:t.date?tsToInput(t.date):todayStr()};
+  editTxSheet();}
+function editTxSheet(){const et=editTxState;
+  let list,selId;
+  if(et.type==='expense'){list=state.cats.filter(c=>c.kind==='expense');selId=et.cid;}
+  else if(et.type==='income'){list=state.incomeCats.map(c=>({id:c.id,emoji:c.e,name:c.n}));selId=et.cid;}
+  else {list=state.cats.filter(c=>c.kind==='transfer').map(c=>({id:c.id,emoji:c.emoji,name:c.name}));selId=et.cid;}
+  const tl=et.type==='expense'?'支出':et.type==='income'?'收入':'存錢';
+  sheet(`<h3>編輯這筆 ${tl} ✏️</h3>
+    <div class="fieldrow"><div class="fe" style="background:var(--jade-soft)">💲</div><div class="fl">金額</div><input type="number" inputmode="numeric" value="${et.amount}" oninput="editTxState.amount=this.value"></div>
+    <div class="fld">分類</div>
+    <div class="chips" style="padding-bottom:4px">${list.map(c=>`<div class="chip ${c.id===selId?'on':''}" onclick="editTxPick('${c.id}')"><span class="e">${c.emoji}</span><span class="n">${c.name}</span></div>`).join('')}</div>
+    <div class="fld">日期</div>
+    <input class="note-in" type="date" value="${et.date}" onchange="editTxState.date=this.value">
+    <div class="fld">備註</div>
+    <input class="note-in" placeholder="備註（選填）" value="${et.note}" oninput="editTxState.note=this.value">
+    <button class="btn" style="margin-top:16px" onclick="saveEditTx()">儲存變更</button>
+    <button class="btn danger" style="margin-top:10px" onclick="deleteEditTx()">🗑 刪除這筆</button>`);}
+function editTxPick(id){editTxState.cid=id;editTxSheet();}
+function saveEditTx(){const et=editTxState;const amt=Math.max(+et.amount||0,0);if(!amt){toast('金額要大於 0 😉');return;}
+  const t=state.transactions[editTxIdx];
+  reverseEffect(t);
+  t.amount=amt;t.categoryId=et.cid;t.note=et.note;t.date=inputToTs(et.date);
+  if(t.type==='expense'){const c=catById(et.cid);t.e=c.emoji;t.n=et.note||c.name;}
+  else if(t.type==='income'){const s=state.incomeCats.find(x=>x.id===et.cid);t.e=s.e;t.n=et.note||s.n;}
+  else{const c=catById(et.cid);t.toAccountId=c.acc;t.e=c.emoji;t.n='存入'+c.name+(et.note?' · '+et.note:'');}
+  applyEffect(t);
+  closeSheet();save();toast('已更新 ✅');rerender();}
+function deleteEditTx(){const t=state.transactions[editTxIdx];
+  sheet(`<h3>刪除這筆紀錄？ ⚠️</h3><p>「${t.n}」${f(t.amount)} 會被刪除，餘額也會一併還原。此動作無法復原。</p>
+    <button class="btn danger" onclick="doDeleteTx()">確定刪除</button>
+    <button class="btn ghost" style="margin-top:10px" onclick="editTxSheet()">取消</button>`);}
+function doDeleteTx(){const t=state.transactions[editTxIdx];reverseEffect(t);state.transactions.splice(editTxIdx,1);closeSheet();save();toast('已刪除這筆');rerender();}
 
 /* ---------- GOALS ---------- */
 function renderGoals(){
@@ -623,6 +677,16 @@ function openAddCat(){newCat={e:'🍩',n:''};const em=['🍩','☕','🐶','💊
     <button class="btn" style="margin-top:14px" onclick="confirmAddCat()">加入分類</button>`);}
 function pickE(el,e){document.querySelectorAll('#nc span').forEach(s=>s.classList.remove('on'));el.classList.add('on');newCat.e=e;}
 function confirmAddCat(){if(!newCat.n.trim()){toast('幫分類取個名字吧 🙂');return;}const id='c'+Date.now();const exp=state.cats.filter(c=>c.kind==='expense').length;state.cats.splice(exp,0,{id,kind:'expense',name:newCat.n.trim(),emoji:newCat.e,color:'#7C8B82',budget:0});ui.cid=id;closeSheet();save();toast('新分類加好了 🎉');rerender();}
+function openManageCats(){const list=state.cats.filter(c=>c.kind==='expense');
+  sheet(`<h3>管理分類 🏷️</h3><p>新增你常用的分類，或刪掉用不到的。投資、儲蓄屬於資產，不在這裡管理。</p>
+    ${list.map(c=>`<div class="fieldrow"><div class="fe" style="background:${tint(c.color,.15)}">${c.emoji}</div><div class="fl">${c.name}</div><button class="paidpill no" onclick="askDeleteCat('${c.id}')">刪除</button></div>`).join('')}
+    <button class="btn" style="margin-top:14px" onclick="openAddCat()">＋ 新增分類</button>
+    <button class="btn ghost" style="margin-top:10px" onclick="closeSheet()">完成</button>`);}
+function askDeleteCat(id){const c=catById(id);const n=state.transactions.filter(t=>t.type==='expense'&&t.categoryId===id).length;
+  sheet(`<h3>刪除分類「${c.name}」？</h3><p>${n>0?`已有 ${n} 筆紀錄用到這個分類，刪除後那些紀錄仍會留在明細，只是不再歸到此分類。`:'這個分類目前沒有任何紀錄。'}</p>
+    <button class="btn danger" onclick="doDeleteCat('${id}')">確定刪除</button>
+    <button class="btn ghost" style="margin-top:10px" onclick="openManageCats()">取消</button>`);}
+function doDeleteCat(id){const idx=state.cats.findIndex(c=>c.id===id);if(idx>=0)state.cats.splice(idx,1);if(ui.cid===id){const fe=state.cats.find(c=>c.kind==='expense');ui.cid=fe?fe.id:null;}closeSheet();save();toast('分類已刪除');rerender();}
 
 let newGoal={e:'🎯',n:'',target:'',date:''};
 function openAddGoal(){newGoal={e:'🎯',n:'',target:'',date:''};const em=['🎯','✈️','🏠','🚗','💍','📷','🎓','🎮'];
@@ -639,7 +703,7 @@ function openGoalSave(i){goalSaveIdx=i;const g=state.goals[i];
   sheet(`<h3>記錄存入：${g.n} ${g.e}</h3><p>這筆會加進目標進度，並從現金移到儲蓄（淨資產不變、只是換口袋）。</p>
     <div class="fieldrow"><div class="fe" style="background:var(--jade-soft)">🐷</div><div class="fl">存入金額</div><input type="number" inputmode="numeric" placeholder="0" id="gs-amt"></div>
     <button class="btn" style="margin-top:8px" onclick="confirmGoalSave()">存進去 💪</button>`);}
-function confirmGoalSave(){const amt=Math.max(+(document.getElementById('gs-amt').value||0),0);if(!amt){toast('輸入金額喔 😉');return;}const g=state.goals[goalSaveIdx];g.saved+=amt;const now=Date.now();state.transactions.unshift({type:'transfer',amount:amt,categoryId:'save',toAccountId:'savings',fromAccountId:'cash',e:'🐷',n:'存入目標 · '+g.n,t:timeLabel(now),date:now});state.accounts.cash-=amt;state.accounts.savings+=amt;closeSheet();save();const done=g.saved>=g.target;toast(done?`達成「${g.n}」！🏆`:`存入 ${f0(amt)}，繼續加油 🌱`);rerender();}
+function confirmGoalSave(){const amt=Math.max(+(document.getElementById('gs-amt').value||0),0);if(!amt){toast('輸入金額喔 😉');return;}const g=state.goals[goalSaveIdx];g.saved+=amt;const now=Date.now();state.transactions.unshift({type:'transfer',amount:amt,categoryId:'save',toAccountId:'savings',fromAccountId:'cash',e:'🐷',n:'存入目標 · '+g.n,note:'',date:now});state.accounts.cash-=amt;state.accounts.savings+=amt;closeSheet();save();const done=g.saved>=g.target;toast(done?`達成「${g.n}」！🏆`:`存入 ${f0(amt)}，繼續加油 🌱`);rerender();}
 
 let newBill={title:'',total:'',e:'🍽️',payer:'我',parts:['我'],newName:''};
 function openAddBill(){newBill={title:'',total:'',e:'🍽️',payer:'我',parts:['我'],newName:''};billSheet();}
@@ -670,7 +734,7 @@ document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==
 let toastTimer;function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 const screens={home:renderHome,budget:renderBudget,add:renderAdd,goals:renderGoals,split:renderSplit};
 function rerender(){document.getElementById('view').innerHTML=screens[ui.current]();}
-function go(name){ui.current=name;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.go===name));document.getElementById('view').classList.toggle('noscroll',name==='add');rerender();document.getElementById('view').scrollTop=0;}
+function go(name){ui.current=name;if(name==='add')ui.date=todayStr();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.go===name));document.getElementById('view').classList.toggle('noscroll',name==='add');rerender();document.getElementById('view').scrollTop=0;}
 document.getElementById('tabbar').addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);});
 document.getElementById('view').addEventListener('click',e=>{const m=e.target.closest('[data-go]');if(m)go(m.dataset.go);});
 
