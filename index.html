@@ -129,6 +129,11 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .daterow .dl{font-size:13px;color:var(--ink-soft);font-weight:600}
 .daterow input{border:none;background:transparent;font-family:var(--font-num);font-size:15px;color:var(--ink);font-weight:600;text-align:right}
 .daterow input:focus{outline:none}
+.backbtn{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);flex-shrink:0}
+select.note-in{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%2367746B' stroke-width='2' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 16px center;padding-right:36px}
+.mgroup{margin-bottom:18px}
+.mhead{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 8px;font-family:var(--font-num);font-weight:600;font-size:14px}
+.mhead .msum{font-size:11.5px;color:var(--ink-soft);font-weight:600}
 .addbottom{margin-top:auto}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}
 .key{padding:15px 0;border-radius:15px;background:var(--card);border:1px solid var(--line);font-family:var(--font-num);font-weight:600;font-size:22px;text-align:center;cursor:pointer;transition:.1s;user-select:none}
@@ -262,12 +267,12 @@ hr{border:none;border-top:1px solid var(--line);margin:18px 0}
    貼進下面對應欄位（取代每個 PASTE_...）。貼好後重新上傳，登入功能就會自動啟用。
    還沒貼之前，App 會維持單機模式（資料只存在這支手機），照常可用。            */
 const firebaseConfig = {
-  apiKey: "AIzaSyAbRCBmjGf-K6GNQUhmSp4JB_x9zLBXraw",
-  authDomain: "money-sprout-f9dad.firebaseapp.com",
-  projectId: "money-sprout-f9dad",
-  storageBucket: "money-sprout-f9dad.firebasestorage.app",
-  messagingSenderId: "914681261844",
-  appId: "1:914681261844:web:98338004fb37f888151c01"
+  apiKey: "PASTE_API_KEY",
+  authDomain: "PASTE_AUTH_DOMAIN",
+  projectId: "PASTE_PROJECT_ID",
+  storageBucket: "PASTE_STORAGE_BUCKET",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId: "PASTE_APP_ID"
 };
 /* ======================================================== */
 
@@ -304,7 +309,7 @@ function blankState(){
   };
 }
 const state=blankState();
-const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', date:'', current:'home', dismissable:true };
+const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', date:'', current:'home', dismissable:true, ledgerType:'all', ledgerCat:'all', ledgerSearch:'' };
 
 /* ---------- persistence (graceful if blocked) ---------- */
 function persistable(){return {meta:state.meta,settings:state.settings,month:state.month,year:state.year,income:state.income,accounts:state.accounts,cats:state.cats,incomeCats:state.incomeCats,transactions:state.transactions,goals:state.goals,splits:state.splits};}
@@ -452,7 +457,7 @@ function renderHome(){
         <div><div class="t">投資</div><div class="v num">${f0(state.accounts.investment)}</div></div>
       </div>
     </div>
-    <div class="sec-title">🧾 最近紀錄 <span class="more" data-go="add">＋ 記一筆</span></div>
+    <div class="sec-title">🧾 最近紀錄 <span class="more" data-go="ledger">看全部</span></div>
     ${state.transactions.length?`<div class="card">${state.transactions.slice(0,5).map((t,i)=>txRow(t,i)).join('')}</div>`
       :`<div class="card"><div class="empty"><div class="ee">📝</div><div class="et">還沒有紀錄，記一筆就會出現在這</div></div></div>`}
   </div>`;
@@ -829,9 +834,46 @@ function sheet(html){document.getElementById('sheet').innerHTML=html;document.ge
 function closeSheet(){document.getElementById('overlay').classList.remove('show');}
 document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay'&&ui.dismissable)closeSheet();});
 let toastTimer;function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
-const screens={home:renderHome,budget:renderBudget,add:renderAdd,goals:renderGoals,split:renderSplit};
+const screens={home:renderHome,budget:renderBudget,add:renderAdd,goals:renderGoals,split:renderSplit,ledger:renderLedger};
+function renderLedger(){
+  const cats=[...state.cats.map(c=>({id:c.id,name:c.name})),...state.incomeCats.map(c=>({id:c.id,name:c.n}))];
+  const tl={all:'全部',expense:'支出',income:'收入',transfer:'存錢'};
+  return `<div class="screen">
+    <div class="hi"><div style="display:flex;align-items:center;gap:11px"><button class="backbtn" onclick="go('home')">←</button><div><h1>帳本</h1><div class="sub">所有收支紀錄</div></div></div></div>
+    <div class="seg">
+      ${['all','expense','income','transfer'].map(t=>`<button class="${ui.ledgerType===t?'on':''}" onclick="setLedgerType('${t}')">${tl[t]}</button>`).join('')}
+    </div>
+    <select class="note-in" style="margin-top:10px" onchange="ui.ledgerCat=this.value;rerender()">
+      <option value="all" ${ui.ledgerCat==='all'?'selected':''}>全部分類</option>
+      ${cats.map(c=>`<option value="${c.id}" ${ui.ledgerCat===c.id?'selected':''}>${c.name}</option>`).join('')}
+    </select>
+    <input class="note-in" style="margin-top:10px" placeholder="🔍 搜尋備註…" value="${ui.ledgerSearch||''}" oninput="ui.ledgerSearch=this.value;updateLedgerList()">
+    <div id="ledgerlist" style="margin-top:16px">${buildLedgerList()}</div>
+  </div>`;
+}
+function buildLedgerList(){
+  let pairs=state.transactions.map((tx,idx)=>({tx,idx}));
+  if(ui.ledgerType!=='all') pairs=pairs.filter(p=>p.tx.type===ui.ledgerType);
+  if(ui.ledgerCat!=='all') pairs=pairs.filter(p=>p.tx.categoryId===ui.ledgerCat);
+  const q=(ui.ledgerSearch||'').trim();
+  if(q) pairs=pairs.filter(p=>(p.tx.n||'').indexOf(q)>=0||(p.tx.note||'').indexOf(q)>=0);
+  pairs.sort((a,b)=>(b.tx.date||0)-(a.tx.date||0));
+  if(!pairs.length) return `<div class="card"><div class="empty"><div class="ee">🔍</div><div class="et">${state.transactions.length?'沒有符合條件的紀錄':'還沒有任何紀錄'}</div></div></div>`;
+  const groups={}, order=[];
+  pairs.forEach(p=>{const d=new Date(p.tx.date||0);const key=`${d.getFullYear()}年${d.getMonth()+1}月`;if(!groups[key]){groups[key]=[];order.push(key);}groups[key].push(p);});
+  return order.map(key=>{
+    const arr=groups[key];
+    const exp=arr.filter(p=>p.tx.type==='expense').reduce((s,p)=>s+p.tx.amount,0);
+    const inc=arr.filter(p=>p.tx.type==='income').reduce((s,p)=>s+p.tx.amount,0);
+    const sum=[exp?'支出 '+f0(exp):'',inc?'收入 '+f0(inc):''].filter(Boolean).join(' · ')||(arr.length+' 筆');
+    return `<div class="mgroup"><div class="mhead"><span>${key}</span><span class="msum">${sum}</span></div>
+      <div class="card" style="padding:4px 16px">${arr.map(p=>txRow(p.tx,p.idx)).join('')}</div></div>`;
+  }).join('');
+}
+function setLedgerType(t){ui.ledgerType=t;rerender();}
+function updateLedgerList(){const el=document.getElementById('ledgerlist');if(el)el.innerHTML=buildLedgerList();}
 function rerender(){document.getElementById('view').innerHTML=screens[ui.current]();}
-function go(name){ui.current=name;if(name==='add')ui.date=todayStr();document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.go===name));document.getElementById('view').classList.toggle('noscroll',name==='add');rerender();document.getElementById('view').scrollTop=0;}
+function go(name){ui.current=name;if(name==='add')ui.date=todayStr();const hl=name==='ledger'?'home':name;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.go===hl));document.getElementById('view').classList.toggle('noscroll',name==='add');rerender();document.getElementById('view').scrollTop=0;}
 document.getElementById('tabbar').addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go);});
 document.getElementById('view').addEventListener('click',e=>{const m=e.target.closest('[data-go]');if(m)go(m.dataset.go);});
 
