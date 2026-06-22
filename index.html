@@ -134,6 +134,16 @@ select.note-in{appearance:none;-webkit-appearance:none;background-image:url("dat
 .mgroup{margin-bottom:18px}
 .mhead{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 8px;font-family:var(--font-num);font-weight:600;font-size:14px}
 .mhead .msum{font-size:11.5px;color:var(--ink-soft);font-weight:600}
+.rangenav{display:flex;align-items:center;gap:8px;margin-top:8px}
+.rangenav button{width:40px;height:42px;border-radius:11px;border:1px solid var(--line);background:var(--card);font-size:18px;cursor:pointer;color:var(--ink-soft);flex-shrink:0}
+.rangenav input{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px 12px;font-family:var(--font-num);font-size:15px;text-align:center;background:var(--card);min-width:0}
+.rangenav .ryear{flex:1;text-align:center;font-family:var(--font-num);font-weight:600;font-size:16px;padding:10px}
+.customrange{display:flex;align-items:center;gap:8px;margin-top:8px}
+.customrange input{flex:1;min-width:0;border:1px solid var(--line);border-radius:11px;padding:11px 10px;font-family:var(--font-num);font-size:14px;text-align:center;background:var(--card)}
+.customrange span{color:var(--ink-faint);flex-shrink:0}
+.rangesum{display:flex;justify-content:space-around;text-align:center;margin-bottom:14px;padding:14px}
+.rangesum .t{font-size:11px;color:var(--ink-soft)}
+.rangesum .v{font-family:var(--font-num);font-weight:700;font-size:17px;margin-top:4px}
 .addbottom{margin-top:auto}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}
 .key{padding:15px 0;border-radius:15px;background:var(--card);border:1px solid var(--line);font-family:var(--font-num);font-weight:600;font-size:22px;text-align:center;cursor:pointer;transition:.1s;user-select:none}
@@ -309,7 +319,7 @@ function blankState(){
   };
 }
 const state=blankState();
-const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', date:'', current:'home', dismissable:true, ledgerType:'all', ledgerCat:'all', ledgerSearch:'' };
+const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', date:'', current:'home', dismissable:true, ledgerType:'all', ledgerCat:'all', ledgerSearch:'', ledgerRange:'all', ledgerDay:'', ledgerMonth:'', ledgerYear:0, ledgerFrom:'', ledgerTo:'' };
 
 /* ---------- persistence (graceful if blocked) ---------- */
 function persistable(){return {meta:state.meta,settings:state.settings,month:state.month,year:state.year,income:state.income,accounts:state.accounts,cats:state.cats,incomeCats:state.incomeCats,transactions:state.transactions,goals:state.goals,splits:state.splits};}
@@ -835,14 +845,30 @@ function closeSheet(){document.getElementById('overlay').classList.remove('show'
 document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay'&&ui.dismissable)closeSheet();});
 let toastTimer;function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 const screens={home:renderHome,budget:renderBudget,add:renderAdd,goals:renderGoals,split:renderSplit,ledger:renderLedger};
+function ensureLedgerDefaults(){const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  if(!ui.ledgerDay)ui.ledgerDay=tsToInput(now.getTime());
+  if(!ui.ledgerMonth)ui.ledgerMonth=ym;
+  if(!ui.ledgerYear)ui.ledgerYear=now.getFullYear();
+  if(!ui.ledgerFrom)ui.ledgerFrom=ym+'-01';
+  if(!ui.ledgerTo)ui.ledgerTo=tsToInput(now.getTime());}
 function renderLedger(){
+  ensureLedgerDefaults();
   const cats=[...state.cats.map(c=>({id:c.id,name:c.name})),...state.incomeCats.map(c=>({id:c.id,name:c.n}))];
   const tl={all:'全部',expense:'支出',income:'收入',transfer:'存錢'};
+  const rl={all:'全部',day:'日',month:'月',year:'年',custom:'自訂'};
+  const R=ui.ledgerRange;
+  let nav='';
+  if(R==='day') nav=`<div class="rangenav"><button onclick="ledgerShiftDay(-1)">‹</button><input type="date" value="${ui.ledgerDay}" onchange="ui.ledgerDay=this.value;rerender()"><button onclick="ledgerShiftDay(1)">›</button></div>`;
+  else if(R==='month') nav=`<div class="rangenav"><button onclick="ledgerShiftMonth(-1)">‹</button><input type="month" value="${ui.ledgerMonth}" onchange="ui.ledgerMonth=this.value;rerender()"><button onclick="ledgerShiftMonth(1)">›</button></div>`;
+  else if(R==='year') nav=`<div class="rangenav"><button onclick="ledgerShiftYear(-1)">‹</button><div class="ryear">${ui.ledgerYear} 年</div><button onclick="ledgerShiftYear(1)">›</button></div>`;
+  else if(R==='custom') nav=`<div class="customrange"><input type="date" value="${ui.ledgerFrom}" onchange="ui.ledgerFrom=this.value;rerender()"><span>～</span><input type="date" value="${ui.ledgerTo}" onchange="ui.ledgerTo=this.value;rerender()"></div>`;
   return `<div class="screen">
     <div class="hi"><div style="display:flex;align-items:center;gap:11px"><button class="backbtn" onclick="go('home')">←</button><div><h1>帳本</h1><div class="sub">所有收支紀錄</div></div></div></div>
-    <div class="seg">
-      ${['all','expense','income','transfer'].map(t=>`<button class="${ui.ledgerType===t?'on':''}" onclick="setLedgerType('${t}')">${tl[t]}</button>`).join('')}
-    </div>
+    <div class="fld" style="margin:6px 2px 7px">期間</div>
+    <div class="seg">${['all','day','month','year','custom'].map(r=>`<button class="${R===r?'on':''}" onclick="setLedgerRange('${r}')">${rl[r]}</button>`).join('')}</div>
+    ${nav}
+    <div class="fld" style="margin:14px 2px 7px">類型</div>
+    <div class="seg">${['all','expense','income','transfer'].map(t=>`<button class="${ui.ledgerType===t?'on':''}" onclick="setLedgerType('${t}')">${tl[t]}</button>`).join('')}</div>
     <select class="note-in" style="margin-top:10px" onchange="ui.ledgerCat=this.value;rerender()">
       <option value="all" ${ui.ledgerCat==='all'?'selected':''}>全部分類</option>
       ${cats.map(c=>`<option value="${c.id}" ${ui.ledgerCat===c.id?'selected':''}>${c.name}</option>`).join('')}
@@ -852,16 +878,31 @@ function renderLedger(){
   </div>`;
 }
 function buildLedgerList(){
+  ensureLedgerDefaults();
   let pairs=state.transactions.map((tx,idx)=>({tx,idx}));
+  const R=ui.ledgerRange;
+  if(R!=='all') pairs=pairs.filter(p=>{const ds=tsToInput(p.tx.date||0);const d=new Date(p.tx.date||0);
+    if(R==='day')return ds===ui.ledgerDay;
+    if(R==='month')return ds.slice(0,7)===ui.ledgerMonth;
+    if(R==='year')return d.getFullYear()===ui.ledgerYear;
+    if(R==='custom')return ds>=ui.ledgerFrom&&ds<=ui.ledgerTo;
+    return true;});
   if(ui.ledgerType!=='all') pairs=pairs.filter(p=>p.tx.type===ui.ledgerType);
   if(ui.ledgerCat!=='all') pairs=pairs.filter(p=>p.tx.categoryId===ui.ledgerCat);
   const q=(ui.ledgerSearch||'').trim();
   if(q) pairs=pairs.filter(p=>(p.tx.n||'').indexOf(q)>=0||(p.tx.note||'').indexOf(q)>=0);
   pairs.sort((a,b)=>(b.tx.date||0)-(a.tx.date||0));
-  if(!pairs.length) return `<div class="card"><div class="empty"><div class="ee">🔍</div><div class="et">${state.transactions.length?'沒有符合條件的紀錄':'還沒有任何紀錄'}</div></div></div>`;
+  if(!pairs.length) return `<div class="card"><div class="empty"><div class="ee">🔍</div><div class="et">${state.transactions.length?'這個範圍沒有紀錄':'還沒有任何紀錄'}</div></div></div>`;
+  const totExp=pairs.filter(p=>p.tx.type==='expense').reduce((s,p)=>s+p.tx.amount,0);
+  const totInc=pairs.filter(p=>p.tx.type==='income').reduce((s,p)=>s+p.tx.amount,0);
+  const summary=`<div class="card rangesum">
+    <div><div class="t">支出</div><div class="v num" style="color:var(--coral)">${f0(totExp)}</div></div>
+    <div><div class="t">收入</div><div class="v num" style="color:var(--jade)">${f0(totInc)}</div></div>
+    <div><div class="t">結餘</div><div class="v num">${f0(totInc-totExp)}</div></div>
+  </div>`;
   const groups={}, order=[];
   pairs.forEach(p=>{const d=new Date(p.tx.date||0);const key=`${d.getFullYear()}年${d.getMonth()+1}月`;if(!groups[key]){groups[key]=[];order.push(key);}groups[key].push(p);});
-  return order.map(key=>{
+  const body=order.map(key=>{
     const arr=groups[key];
     const exp=arr.filter(p=>p.tx.type==='expense').reduce((s,p)=>s+p.tx.amount,0);
     const inc=arr.filter(p=>p.tx.type==='income').reduce((s,p)=>s+p.tx.amount,0);
@@ -869,8 +910,13 @@ function buildLedgerList(){
     return `<div class="mgroup"><div class="mhead"><span>${key}</span><span class="msum">${sum}</span></div>
       <div class="card" style="padding:4px 16px">${arr.map(p=>txRow(p.tx,p.idx)).join('')}</div></div>`;
   }).join('');
+  return summary+body;
 }
 function setLedgerType(t){ui.ledgerType=t;rerender();}
+function setLedgerRange(r){ui.ledgerRange=r;rerender();}
+function ledgerShiftDay(n){const dt=new Date(ui.ledgerDay+'T12:00:00');dt.setDate(dt.getDate()+n);ui.ledgerDay=tsToInput(dt.getTime());rerender();}
+function ledgerShiftMonth(n){const [y,m]=ui.ledgerMonth.split('-').map(Number);const dt=new Date(y,m-1+n,1);ui.ledgerMonth=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;rerender();}
+function ledgerShiftYear(n){ui.ledgerYear=ui.ledgerYear+n;rerender();}
 function updateLedgerList(){const el=document.getElementById('ledgerlist');if(el)el.innerHTML=buildLedgerList();}
 function rerender(){document.getElementById('view').innerHTML=screens[ui.current]();}
 function go(name){ui.current=name;if(name==='add')ui.date=todayStr();const hl=name==='ledger'?'home':name;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.go===hl));document.getElementById('view').classList.toggle('noscroll',name==='add');rerender();document.getElementById('view').scrollTop=0;}
