@@ -404,7 +404,7 @@ const netWorth=()=>state.accounts.cash+state.accounts.savings+state.accounts.inv
 const spentOf=id=>state.transactions.filter(t=>t.type==='expense'&&t.categoryId===id).reduce((s,t)=>s+t.amount,0);
 const movedTo=acc=>state.transactions.filter(t=>t.type==='transfer'&&t.toAccountId===acc).reduce((s,t)=>s+t.amount,0);
 const progressOf=c=>c.kind==='expense'?spentOf(c.id):movedTo(c.acc);
-const totalExpense=()=>state.cats.filter(c=>c.kind==='expense').reduce((s,c)=>s+spentOf(c.id),0);
+const totalExpense=()=>state.transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
 const totalMoved=()=>movedTo('savings')+movedTo('investment');
 const allocated=()=>state.cats.reduce((s,c)=>s+(c.budget||0),0);
 function greet(){const h=new Date().getHours();return h<5?'夜深了':h<11?'早安':h<14?'午安':h<18?'下午好':'晚安';}
@@ -436,7 +436,12 @@ function barColor(c){
 
 /* ---------- HOME ---------- */
 function renderHome(){
-  const exp=state.cats.filter(c=>c.kind==='expense').map(c=>({label:c.name,color:c.color,value:spentOf(c.id)})).filter(v=>v.value>0);
+  const expMap={}; let expOther=0;
+  state.transactions.filter(t=>t.type==='expense').forEach(t=>{const c=catById(t.categoryId);
+    if(c){if(!expMap[c.id])expMap[c.id]={label:c.name,color:c.color,value:0};expMap[c.id].value+=t.amount;}
+    else expOther+=t.amount;});
+  const exp=Object.values(expMap).filter(v=>v.value>0);
+  if(expOther>0) exp.push({label:'其他',color:'#B8C0B4',value:expOther});
   const totalExp=exp.reduce((s,x)=>s+x.value,0);
   const moved=totalMoved();
   const leftover=state.income-totalExp-moved;
