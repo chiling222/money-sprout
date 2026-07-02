@@ -290,28 +290,31 @@ const LS_KEY='moneysprout_v1';
 const DAY=86400000;
 
 function defaultCats(){return [
-  {id:'food', kind:'expense', name:'日常餐飲', emoji:'🍱', color:'#FF9F43', budget:0},
-  {id:'feast',kind:'expense', name:'大餐',     emoji:'🍣', color:'#FF6B6B', budget:0},
-  {id:'trans',kind:'expense', name:'交通',     emoji:'🚌', color:'#3FA9F5', budget:0},
-  {id:'fun',  kind:'expense', name:'娛樂',     emoji:'🎮', color:'#9B7EDE', budget:0},
-  {id:'shop', kind:'expense', name:'購物',     emoji:'🛍️', color:'#F783AC', budget:0},
-  {id:'sub',  kind:'expense', name:'訂閱',     emoji:'📺', color:'#20C997', budget:0},
-  {id:'misc', kind:'expense', name:'不明損失', emoji:'🕳️', color:'#94A3B8', budget:0, special:'unknown_loss'},
-  {id:'invest',kind:'transfer',acc:'investment',name:'投資',emoji:'📈',color:'#10A567', budget:0},
+  {id:'exp_food',  kind:'expense', name:'餐飲生活', emoji:'🍜', color:'#FF7A59', budget:0, tags:[]},
+  {id:'exp_trans', kind:'expense', name:'交通出行', emoji:'🚌', color:'#FF9F43', budget:0, tags:[]},
+  {id:'exp_home',  kind:'expense', name:'居家住房', emoji:'🏠', color:'#F76B6B', budget:0, tags:[]},
+  {id:'exp_shop',  kind:'expense', name:'購物消費', emoji:'🛍️', color:'#FF8552', budget:0, tags:[]},
+  {id:'exp_health',kind:'expense', name:'健康醫療', emoji:'🏥', color:'#FF8FA3', budget:0, tags:[]},
+  {id:'exp_study', kind:'expense', name:'學習工作', emoji:'📚', color:'#FFA94D', budget:0, tags:[]},
+  {id:'exp_fun',   kind:'expense', name:'娛樂社交', emoji:'🎉', color:'#FF6F91', budget:0, tags:[]},
+  {id:'exp_fin',   kind:'expense', name:'財務支出', emoji:'🏦', color:'#E8823A', budget:0, tags:[]},
+  {id:'invest',kind:'transfer',acc:'investment',name:'投資',emoji:'💹',color:'#10A567', budget:0},
   {id:'save', kind:'transfer', acc:'savings',   name:'儲蓄',emoji:'🐷',color:'#FFB72B', budget:0},
 ];}
 function blankState(){
   const now=new Date();
   return {
-    meta:{onboarded:false, startedAt:null, version:1},
+    meta:{onboarded:false, startedAt:null, version:1, catsV:2},
     settings:{overspendAlertRatio:0.85, splitReminderDays:7},
     month:now.getMonth()+1, year:now.getFullYear(),
     income:0,
     accounts:{cash:0, savings:0, investment:0},
     cats:defaultCats(),
     incomeCats:[
-      {id:'salary',n:'薪水',e:'💰'},{id:'bonus',n:'獎金',e:'🎁'},{id:'side',n:'副業',e:'💪'},
-      {id:'gain',n:'投資收益',e:'📈'},{id:'redpack',n:'紅包',e:'🧧'},{id:'refund',n:'退款',e:'↩️'},{id:'other',n:'其他',e:'✨'},
+      {id:'inc_work',n:'工作收入',e:'💼',tags:[]},
+      {id:'inc_invest',n:'投資理財',e:'📈',tags:[]},
+      {id:'inc_gift',n:'禮金／贈與',e:'🎁',tags:[]},
+      {id:'inc_other',n:'其他收入',e:'💵',tags:[]},
     ],
     transactions:[],
     goals:[],
@@ -319,12 +322,22 @@ function blankState(){
   };
 }
 const state=blankState();
-const ui={ type:'expense', amount:'', cid:'food', incomeCid:'salary', saveCid:'save', note:'', date:'', current:'home', dismissable:true, ledgerType:'all', ledgerCat:'all', ledgerSearch:'', ledgerRange:'all', ledgerDay:'', ledgerMonth:'', ledgerYear:0, ledgerFrom:'', ledgerTo:'' };
+const ui={ type:'expense', amount:'', cid:'exp_food', incomeCid:'inc_work', saveCid:'save', note:'', date:'', current:'home', dismissable:true, ledgerType:'all', ledgerCat:'all', ledgerSearch:'', ledgerRange:'all', ledgerDay:'', ledgerMonth:'', ledgerYear:0, ledgerFrom:'', ledgerTo:'' };
 
 /* ---------- persistence (graceful if blocked) ---------- */
 function persistable(){return {meta:state.meta,settings:state.settings,month:state.month,year:state.year,income:state.income,accounts:state.accounts,cats:state.cats,incomeCats:state.incomeCats,transactions:state.transactions,goals:state.goals,splits:state.splits};}
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(persistable()));}catch(e){}if(CLOUD){clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(cloudSave,800);}}
 function load(){try{const r=localStorage.getItem(LS_KEY);if(r){const d=JSON.parse(r);Object.keys(d).forEach(k=>{state[k]=d[k];});return true;}}catch(e){}return false;}
+function migrateCats(){
+  if(!state.meta) return;
+  if(state.meta.catsV!==2){
+    state.cats=defaultCats();
+    state.incomeCats=blankState().incomeCats;
+    state.meta.catsV=2;
+    ui.cid='exp_food'; ui.incomeCid='inc_work';
+    save();
+  }
+}
 
 /* ---------- Firebase 雲端層 ---------- */
 let CLOUD=false, auth=null, db=null, cloudUser=null, cloudSaveTimer=null;
@@ -369,6 +382,7 @@ function startWithUser(user){
     const local=readLocal(); if(local) applyState(local);
     console.warn('讀取雲端失敗，改用本機快取',e);
   }).then(function(){
+    migrateCats();
     showGate(false); go('home');
     if(!state.meta.onboarded) openOnboarding();
   });
@@ -782,13 +796,14 @@ function doReset(){try{localStorage.removeItem(LS_KEY);}catch(e){}const b=blankS
 
 /* ---------- add category / goal / goal-save / bill ---------- */
 let newCat={e:'🍩',n:''};
-function openAddCat(){newCat={e:'🍩',n:''};const em=['🍩','☕','🐶','💊','🎁','📚','✈️','💄','⛽','🏋️'];
+function openAddCat(){newCat={e:'🍩',n:''};
+  const em=['🍩','🍜','🍱','🍔','🍰','☕','🍺','🛒','🛍️','🎁','🏠','🛏️','🚌','🚗','⛽','✈️','🚲','💊','🏥','💉','💅','💄','✂️','🐶','🐱','🐾','👶','🎮','🎬','🎵','📚','✏️','💻','📱','🏋️','⚽','🎨','🎸','💼','💰','💳','🧾','🏦','📈','🎓','🌿','🎉','❤️','⭐'];
   sheet(`<h3>新增常用分類</h3><p>取個名字、挑個圖示，之後記帳更快。</p>
     <input class="note-in" placeholder="分類名稱，例如：寵物、咖啡…" oninput="newCat.n=this.value">
-    <div class="emoji-pick" id="nc">${em.map((e,i)=>`<span class="${i===0?'on':''}" onclick="pickE(this,'${e}')">${e}</span>`).join('')}</div>
+    <div class="emoji-pick" id="nc" style="max-height:200px;overflow-y:auto">${em.map((e,i)=>`<span class="${i===0?'on':''}" onclick="pickE(this,'${e}')">${e}</span>`).join('')}</div>
     <button class="btn" style="margin-top:14px" onclick="confirmAddCat()">加入分類</button>`);}
 function pickE(el,e){document.querySelectorAll('#nc span').forEach(s=>s.classList.remove('on'));el.classList.add('on');newCat.e=e;}
-function confirmAddCat(){if(!newCat.n.trim()){toast('幫分類取個名字吧 🙂');return;}const id='c'+Date.now();const exp=state.cats.filter(c=>c.kind==='expense').length;state.cats.splice(exp,0,{id,kind:'expense',name:newCat.n.trim(),emoji:newCat.e,color:'#7C8B82',budget:0});ui.cid=id;closeSheet();save();toast('新分類加好了 🎉');rerender();}
+function confirmAddCat(){if(!newCat.n.trim()){toast('幫分類取個名字吧 🙂');return;}const id='c'+Date.now();const exp=state.cats.filter(c=>c.kind==='expense').length;state.cats.splice(exp,0,{id,kind:'expense',name:newCat.n.trim(),emoji:newCat.e,color:'#FF8552',budget:0,tags:[]});ui.cid=id;closeSheet();save();toast('新分類加好了 🎉');rerender();}
 function openManageCats(){const list=state.cats.filter(c=>c.kind==='expense');
   sheet(`<h3>管理分類 🏷️</h3><p>新增你常用的分類，或刪掉用不到的。投資、儲蓄屬於資產，不在這裡管理。</p>
     ${list.map(c=>`<div class="fieldrow"><div class="fe" style="background:${tint(c.color,.15)}">${c.emoji}</div><div class="fl">${c.name}</div><button class="paidpill no" onclick="askDeleteCat('${c.id}')">刪除</button></div>`).join('')}
@@ -933,6 +948,7 @@ if(CLOUD){
   });
 }else{
   load();
+  migrateCats();
   go('home');
   if(!state.meta.onboarded) openOnboarding();
 }
